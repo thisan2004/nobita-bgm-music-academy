@@ -689,13 +689,13 @@ function reviewList(preview) {
 }
 
 pages.teachers = () => `
-  ${pgHero("teachers-hero", "Our Teachers", "Learn From Passionate Teachers", "Teacher profiles will be added as they are confirmed.", `<a href="#/">Home</a> / Our Teachers`)}
-  <section><div class="w"><div class="g3">${INST.map(x=>`<article class="card">${ph("teacher-"+x.k)}<div class="eb">${x.t}</div><h3 style="margin-top:6px">Mr. Head Saran</h3><p class="m">Head Teacher, ${x.t}</p><div class="btns"><a class="btn o s" href="#/courses/${x.k}">View Course</a></div></article>`).join("")}</div></div></section>
+  ${pgHero("teachers-hero", "Our Teachers", "Learn From Passionate Teachers", "Meet the teachers who guide every student.", `<a href="#/">Home</a> / Our Teachers`)}
+  <section><div class="w"><div class="g3">${teacherList().map((t, i) => `<article class="card">${t.photo ? `<div class="ph" style="--img:url(${t.photo})"></div>` : ph("teacher-" + (t.k || "x" + i))}<div class="eb">${esc(t.role)}</div><h3 style="margin-top:6px">${esc(t.name)}</h3>${t.bio ? `<p class="m">${esc(t.bio)}</p>` : ""}${t.k ? `<div class="btns"><a class="btn o s" href="#/courses/${esc(t.k)}">View Course</a></div>` : ""}</article>`).join("")}</div></div></section>
   ${ctaBand("Meet Your Future Teacher")}`;
 
 pages.owner = () => `
   ${pgHero("contact-hero", "Owner", "Owner Panel", "Review approve / remove panna mattum.", `<a href="#/">Home</a> / Owner`)}
-  <section><div class="w"><div id="ownerBox"><div class="empty">Loading...</div></div><div id="mediaBox" style="margin-top:50px"></div><div id="siteBox" style="margin-top:50px"></div><div id="contentBox" style="margin-top:50px"></div></div></section>`;
+  <section><div class="w"><div id="ownerBox"><div class="empty">Loading...</div></div><div id="mediaBox" style="margin-top:50px"></div><div id="siteBox" style="margin-top:50px"></div><div id="contentBox" style="margin-top:50px"></div><div id="teacherBox" style="margin-top:50px"></div></div></section>`;
 pages.apply = () => `
   ${pgHero("apply-hero", "Admissions", "Start Your Musical Journey Today", "Apply to Nobita Bgm Music Academy and tell us which instrument you would love to learn.", `<a href="#/">Home</a> / Apply Online`)}
   <section><div class="w"><div class="hd c"><div class="eb">Student Application Form</div><h2>Apply Online</h2></div>${formBox("apply", "We use your details only to process your application.")}</div></section>`;
@@ -1050,7 +1050,7 @@ function renderOwner(){
 }
 function afterRoute(page){
   setAuthUI(); renderReviews(); renderReviewForm(); renderMedia(); loadSite(); loadContent(); refreshSelects();
-  if (page === "owner") { renderOwner(); renderMediaAdmin(); renderSiteAdmin(); renderContentAdmin(); }
+  if (page === "owner") { renderOwner(); renderMediaAdmin(); renderSiteAdmin(); renderContentAdmin(); renderTeacherAdmin(); }
 }
 document.getElementById("authForm").addEventListener("submit", async e => {
   e.preventDefault();
@@ -1091,7 +1091,7 @@ document.addEventListener("click", async e => {
   } catch (err) { alert("Action fail aagiduchu: " + (err.message || "")); }
 });
 window.addEventListener("nbready", setAuthUI);
-window.addEventListener("nbauth", () => { setAuthUI(); renderReviewForm(); renderReviews(); renderMedia(); if (location.hash.startsWith("#/owner")) { renderOwner(); renderMediaAdmin(); renderSiteAdmin(); renderContentAdmin(); } loadSite(); loadContent(); });
+window.addEventListener("nbauth", () => { setAuthUI(); renderReviewForm(); renderReviews(); renderMedia(); if (location.hash.startsWith("#/owner")) { renderOwner(); renderMediaAdmin(); renderSiteAdmin(); renderContentAdmin(); renderTeacherAdmin(); } loadSite(); loadContent(); });
 
 /* Firebase: login, reviews (stored in the database) and owner checks */
 const firebaseModule = `
@@ -1340,13 +1340,16 @@ async function loadContent(){
   nbWhenReady(async () => {
     try {
       const ins = await NB.getContent("instruments"), svc = await NB.getContent("services");
-      if (applyContent(ins, svc)) route();
+      const tch = await NB.getContent("teachers");
+      const changed = applyContent(ins, svc); const tc = applyTeachers(tch);
+      if (changed || tc) route();
     } catch (e) {}
   });
 }
 async function reloadContent(){
   const ins = await NB.getContent("instruments"), svc = await NB.getContent("services");
-  applyContent(ins, svc); route();
+  const tch = await NB.getContent("teachers");
+  applyContent(ins, svc); applyTeachers(tch); route();
 }
 function instCardHTML(x, i){
   return `<article class="rv" data-idx="${i}" style="padding:20px;margin-bottom:18px">
@@ -1501,6 +1504,67 @@ document.addEventListener("submit", async e => {
     await loadMediaList(); renderMedia();
   } catch (err) { msg.className = "msg bad"; msg.textContent = "Add fail: " + (err.message || ""); }
   finally { btn.disabled = false; }
+});
+
+/* ===== Owner-managed teachers ===== */
+let TEACHERS = null;
+function normTeacher(it){ return { name: it.name || "", role: it.role || "", bio: it.bio || "", photo: it.photo || "", k: it.k || "" }; }
+function applyTeachers(doc){
+  if (doc && doc.items && doc.items.length) { TEACHERS = doc.items.map(normTeacher); return true; }
+  return false;
+}
+function teacherList(){
+  return TEACHERS && TEACHERS.length ? TEACHERS : INST.map(x => ({ name: "Mr. Head Saran", role: "Head Teacher · " + x.t, bio: "", photo: "", k: x.k }));
+}
+function teacherCardHTML(t, i){
+  return `<article class="rv" data-tidx="${i}" style="padding:20px;margin-bottom:18px">
+    <div class="eb">Teacher ${i + 1}</div>
+    <label>Name *</label><input data-tf="name" value="${esc(t.name || "")}">
+    <label>Role / Subject (eg. Head Teacher · Guitar)</label><input data-tf="role" value="${esc(t.role || "")}">
+    <label>Short bio / experience (optional)</label><textarea data-tf="bio">${esc(t.bio || "")}</textarea>
+    <label>Photo (maatha venumna mattum select pannunga)</label><input type="file" accept="image/*" data-tf="photo">
+    <div class="btns" style="margin-top:12px"><button class="btn s o" type="button" data-trm>Remove</button></div>
+  </article>`;
+}
+function renderTeacherAdmin(){
+  const box = document.getElementById("teacherBox"); if (!box) return;
+  nbWhenReady(() => {
+    if (!NB.isOwner()) { box.innerHTML = ""; return; }
+    const list = teacherList();
+    box.innerHTML = `<div class="eb">Our Teachers</div><h2 style="margin:8px 0 18px">Teachers Editor</h2>
+      <div id="teacherEditor">${list.map((t, i) => teacherCardHTML(t, i)).join("")}</div>
+      <div class="btns"><button class="btn s o" type="button" data-add-teacher>+ Add Teacher</button><button class="btn" type="button" data-save-teachers>Save Teachers</button></div>`;
+    document.querySelectorAll("#teacherEditor [data-tidx]").forEach((c, i) => { c.dataset.photo = list[i].photo || ""; });
+  });
+}
+async function saveTeachersEditor(){
+  const cards = [...document.querySelectorAll("#teacherEditor [data-tidx]")], items = [];
+  try {
+    for (const c of cards) {
+      const g = n => c.querySelector('[data-tf="' + n + '"]');
+      const name = g("name").value.trim(); if (!name) continue;
+      let photo = c.dataset.photo || "";
+      const f = g("photo").files[0]; if (f) photo = await resizeImage(f, 500, "image/jpeg");
+      const it = { name: name, role: g("role").value.trim(), bio: g("bio").value.trim() };
+      if (photo) it.photo = photo;
+      items.push(it);
+    }
+    if (!items.length) { alert("Kanam 1 teacher irukkanum."); return; }
+    if (JSON.stringify({ items: items }).length > 900000) { alert("Photos periya-ah irukku. Chinna photos use pannunga."); return; }
+    await NB.saveContent("teachers", { items: items });
+    applyTeachers({ items: items });
+    route();
+    alert("Saved! Our Teachers page-la maatham theriyum.");
+  } catch (err) { alert("Save fail: " + (err.message || "")); }
+}
+document.addEventListener("click", e => {
+  const t = e.target;
+  if (t.closest("[data-add-teacher]")) {
+    document.getElementById("teacherEditor").insertAdjacentHTML("beforeend", teacherCardHTML({}, document.querySelectorAll("#teacherEditor [data-tidx]").length));
+    return;
+  }
+  const rm = t.closest("[data-trm]"); if (rm && rm.closest("#teacherEditor")) { rm.closest("article").remove(); return; }
+  if (t.closest("[data-save-teachers]")) saveTeachersEditor();
 });
 rebuildMenus();
 refreshSelects();
